@@ -1,1 +1,1 @@
-# queue
+# Simple JavaScript queue
