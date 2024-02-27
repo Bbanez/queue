@@ -6,8 +6,13 @@ export interface QueueHandler<Output> {
 
 export interface QueueData<Output> {
   wait: Promise<QueueError | QueueResult<Output>>;
+  stop: () => void;
 }
 
 export interface Queue<Output> {
-  (data: { name: string; handler: QueueHandler<Output> }): QueueData<Output>;
+  (data: {
+    name: string;
+    priority?: boolean;
+    handler: QueueHandler<Output>;
+  }): QueueData<Output>;
 }

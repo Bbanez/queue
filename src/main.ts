@@ -3,17 +3,16 @@ import { Queue, QueueError, QueueResult } from './types';
 
 export function createQueue<Output>(): Queue<Output> {
   let busy = false;
-
-  const items: {
-    [id: string]: { name: string; handler(callback: () => void): void };
-  } = {};
+  const items: Array<{
+    id: string;
+    name: string;
+    handler(callback: () => void): void;
+  }> = [];
 
   function nextItem() {
-    const id = Object.keys(items)[0];
-    if (id) {
-      const data = items[id];
+    const data = items.pop();
+    if (data) {
       data.handler(() => {
-        delete items[id];
         nextItem();
       });
     } else {
@@ -29,21 +28,41 @@ export function createQueue<Output>(): Queue<Output> {
       resolve = res;
     });
 
-    items[id] = {
-      name: data.name,
-      handler: (callback) => {
-        data
-          .handler()
-          .then((value) => {
-            resolve(new QueueResult<Output>(value));
-            callback();
-          })
-          .catch((error) => {
-            resolve(new QueueError(error));
-            callback();
-          });
-      },
-    };
+    if (data.priority) {
+      items.push({
+        id,
+        name: data.name,
+        handler: (callback) => {
+          data
+            .handler()
+            .then((value) => {
+              resolve(new QueueResult<Output>(value));
+              callback();
+            })
+            .catch((error) => {
+              resolve(new QueueError(error));
+              callback();
+            });
+        },
+      });
+    } else {
+      items.splice(0, 0, {
+        id,
+        name: data.name,
+        handler: (callback) => {
+          data
+            .handler()
+            .then((value) => {
+              resolve(new QueueResult<Output>(value));
+              callback();
+            })
+            .catch((error) => {
+              resolve(new QueueError(error));
+              callback();
+            });
+        },
+      });
+    }
     promise.catch((error) => {
       // eslint-disable-next-line no-console
       console.error(data.name, error);
@@ -54,6 +73,16 @@ export function createQueue<Output>(): Queue<Output> {
     }
     return {
       wait: promise,
+      stop: () => {
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].id === id) {
+            items.splice(i, 1);
+            resolve(
+              new QueueError(Error('Queue item has been canceled by user')),
+            );
+          }
+        }
+      },
     };
   };
 }
